@@ -3,11 +3,24 @@
 #include "user/user.h"
 #include "kernel/riscv.h"
 
+
 int
 main(int argc, char *argv[])
 {
-  // your code here.  you should write the secret to fd 2 using write
-  // (e.g., write(2, secret, 8)
+  char *p = sbrk(PGSIZE * 17);
+  if(p == (char *) -1){
+    fprintf(2, "sbrk failed\n");
+    exit(1);
+  }
+  p=p+16*PGSIZE;
+  // 偏移32字节读取8字节秘密
+  char *secret = p + 32;
 
-  exit(1);
+  // 写到文件描述符2
+  write(2, secret, 8);
+
+  exit(0);
 }
+
+
+
