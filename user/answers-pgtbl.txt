@@ -1,0 +1,40 @@
+va 0x0: pte = 0x21BC7C5B, pa = 0x86F1F000, perm = 0x5B. This page is valid (V), readable (R), writable (W), executable (X), user-accessible (U), accessed (A), and dirty (D).
+
+va 0x1000: pte = 0x21BC701B, pa = 0x86F1C000, perm = 0x1B. This page is valid, readable, writable, user-accessible, and accessed, but not executable (X), and not dirty (D).
+
+va 0x2000: pte = 0x21BC6C17, pa = 0x86F1B000, perm = 0x17. This page is valid, readable, writable, user-accessible, and accessed. It is not executable, but it is dirty.
+
+va 0x3000: pte = 0x21BC6807, pa = 0x86F1A000, perm = 0x7. This page is valid, readable, and writable. It is not user-accessible, not executable, not accessed, nor dirty.
+
+va 0x4000: pte = 0x21BC64D7, pa = 0x86F19000, perm = 0xD7. This page is valid, readable, writable, executable, user-accessible, global, accessed, and dirty.
+
+va 0x5000: pte = 0x0, pa = 0x0, perm = 0x0. This page is not mapped (invalid).
+
+va 0x6000: pte = 0x0, pa = 0x0, perm = 0x0. This page is not mapped (invalid).
+
+va 0x7000: pte = 0x0, pa = 0x0, perm = 0x0. This page is not mapped (invalid).
+
+va 0x8000: pte = 0x0, pa = 0x0, perm = 0x0. This page is not mapped (invalid).
+
+va 0x9000: pte = 0x0, pa = 0x0, perm = 0x0. This page is not mapped (invalid).
+
+va 0xFFFF6000: pte = 0x0, pa = 0x0, perm = 0x0. This page is not mapped (invalid).
+
+va 0xFFFF7000: pte = 0x0, pa = 0x0, perm = 0x0. This page is not mapped (invalid).
+
+va 0xFFFF8000: pte = 0x0, pa = 0x0, perm = 0x0. This page is not mapped (invalid).
+
+va 0xFFFF9000: pte = 0x0, pa = 0x0, perm = 0x0. This page is not mapped (invalid).
+
+va 0xFFFFA000: pte = 0x0, pa = 0x0, perm = 0x0. This page is not mapped (invalid).
+
+va 0xFFFFB000: pte = 0x0, pa = 0x0, perm = 0x0. This page is not mapped (invalid).
+
+va 0xFFFFC000: pte = 0x0, pa = 0x0, perm = 0x0. This page is not mapped (invalid).
+
+va 0xFFFFD000: pte = 0x21BD4C13, pa = 0x86F53000, perm = 0x13. This page is valid, readable, user-accessible, and accessed. It is not writable or executable.
+
+va 0xFFFFE000: pte = 0x21BD00C7, pa = 0x86F40000, perm = 0xC7. This page is valid, readable, writable, executable, user-accessible, accessed, and dirty.
+
+va 0xFFFFF000: pte = 0x2000184B, pa = 0x80006000, perm = 0x4B. This page is valid, readable, executable, accessed, and dirty, but not user-accessible — this is likely a kernel text page.
+
