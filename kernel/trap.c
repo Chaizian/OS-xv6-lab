@@ -66,6 +66,24 @@ usertrap(void)
 
     syscall();
   } else if((which_dev = devintr()) != 0){
+    if(which_dev == 2){
+  struct proc *p = myproc();
+
+  if (p->alarm_interval > 0 && p->handling_alarm == 0) {
+    p->alarm_ticks++;
+    if (p->alarm_ticks >= p->alarm_interval) {
+      p->alarm_ticks = 0;
+      p->handling_alarm = 1;
+
+      // 保存当前 trapframe 以便 handler 结束后恢复
+      p->alarm_tf_backup = *(p->trapframe);
+
+      // 设置 eip 为 handler 地址，下次返回跳到 handler
+      p->trapframe->epc = (uint64)p->alarm_handler;
+    }
+  }
+}
+
     // ok
   } else {
     printf("usertrap(): unexpected scause 0x%lx pid=%d\n", r_scause(), p->pid);

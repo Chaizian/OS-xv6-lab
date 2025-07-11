@@ -41,3 +41,7 @@ void *memcpy(void *, const void *, uint);
 // umalloc.c
 void* malloc(uint);
 void free(void*);
+
+int sigalarm(int ticks, void (*handler)());
+int sigreturn(void);
+

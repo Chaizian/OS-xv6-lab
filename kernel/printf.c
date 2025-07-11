@@ -160,12 +160,30 @@ printf(char *fmt, ...)
 }
 
 void
+backtrace(void)
+{
+  uint64 fp = r_fp();
+  printf("backtrace:\n");
+
+  // PGROUNDDOWN: 限定在一个内核栈页内
+  uint64 stack_bottom = PGROUNDDOWN(fp);
+
+  while (fp >= stack_bottom && fp < stack_bottom + PGSIZE) {
+    uint64 ra = *(uint64 *)(fp - 8);
+    printf("%p\n", (void *)ra);
+    fp = *(uint64 *)(fp - 16);
+  }
+}
+
+
+void
 panic(char *s)
 {
   pr.locking = 0;
   printf("panic: ");
   printf("%s\n", s);
   panicked = 1; // freeze uart output from other CPUs
+  backtrace();
   for(;;)
     ;
 }
