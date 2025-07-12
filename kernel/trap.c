@@ -67,11 +67,19 @@ usertrap(void)
     syscall();
   } else if((which_dev = devintr()) != 0){
     // ok
+  } 
+  else if (r_scause() == 13 || r_scause() == 15 || r_scause() == 2) {
+  // 检查是否为 COW 页
+  if (iscowpage(r_stval())) {
+    startcowcopy(r_stval());
   } else {
-    printf("usertrap(): unexpected scause 0x%lx pid=%d\n", r_scause(), p->pid);
+    // 非法访问：kill 掉进程即可，不应 panic
+    printf("usertrap(): page fault scause=0x%lx pid=%d\n", r_scause(), p->pid);
     printf("            sepc=0x%lx stval=0x%lx\n", r_sepc(), r_stval());
     setkilled(p);
   }
+}
+
 
   if(killed(p))
     exit(-1);

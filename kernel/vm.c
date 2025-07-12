@@ -5,6 +5,8 @@
 #include "riscv.h"
 #include "defs.h"
 #include "fs.h"
+#include "spinlock.h"
+#include "proc.h"
 
 /*
  * the kernel's page table.
@@ -259,19 +261,27 @@ uvmalloc(pagetable_t pagetable, uint64 oldsz, uint64 newsz, int xperm)
 // newsz.  oldsz and newsz need not be page-aligned, nor does newsz
 // need to be less than oldsz.  oldsz can be larger than the actual
 // process size.  Returns the new process size.
-uint64
-uvmdealloc(pagetable_t pagetable, uint64 oldsz, uint64 newsz)
+uint64 uvmdealloc(pagetable_t pagetable, uint64 oldsz, uint64 newsz)
 {
   if(newsz >= oldsz)
     return oldsz;
 
-  if(PGROUNDUP(newsz) < PGROUNDUP(oldsz)){
-    int npages = (PGROUNDUP(oldsz) - PGROUNDUP(newsz)) / PGSIZE;
-    uvmunmap(pagetable, PGROUNDUP(newsz), npages, 1);
+  uint64 a;
+
+  // 对齐到页大小，释放从newsz对齐页开始的所有页
+  a = PGROUNDUP(newsz);
+  for(; a < oldsz; a += PGSIZE){
+    pte_t *pte = walk(pagetable, a, 0);
+    if(pte && (*pte & PTE_V) != 0){
+
+      uvmunmap(pagetable, a, 1, 1); // do_free=1，释放物理页
+    }
   }
 
   return newsz;
 }
+
+
 
 // Recursively free page-table pages.
 // All leaf mappings must already have been removed.
@@ -315,7 +325,6 @@ uvmcopy(pagetable_t old, pagetable_t new, uint64 sz)
   pte_t *pte;
   uint64 pa, i;
   uint flags;
-  char *mem;
 
   for(i = 0; i < sz; i += PGSIZE){
     if((pte = walk(old, i, 0)) == 0)
@@ -323,14 +332,20 @@ uvmcopy(pagetable_t old, pagetable_t new, uint64 sz)
     if((*pte & PTE_V) == 0)
       panic("uvmcopy: page not present");
     pa = PTE2PA(*pte);
+
+    // lab5: Copy on write
+    // father
+    // 如果该页本身就不可写，那么子进程肯定也不可写，不用对其考虑COW
+    if(*pte & PTE_W){  
+        *pte &= ~PTE_W;
+        *pte |= PTE_COW;
+    }
     flags = PTE_FLAGS(*pte);
-    if((mem = kalloc()) == 0)
-      goto err;
-    memmove(mem, (char*)pa, PGSIZE);
-    if(mappages(new, i, PGSIZE, (uint64)mem, flags) != 0){
-      kfree(mem);
+    // child
+    if(mappages(new, i, PGSIZE, (uint64)pa, flags) != 0){
       goto err;
     }
+    refup((void*)pa);
   }
   return 0;
 
@@ -363,16 +378,32 @@ copyout(pagetable_t pagetable, uint64 dstva, char *src, uint64 len)
 
   while(len > 0){
     va0 = PGROUNDDOWN(dstva);
-    if(va0 >= MAXVA)
+    if (va0 >= MAXVA)
       return -1;
+
     pte = walk(pagetable, va0, 0);
-    if(pte == 0 || (*pte & PTE_V) == 0 || (*pte & PTE_U) == 0 ||
-       (*pte & PTE_W) == 0)
+    if (pte == 0 || (*pte & PTE_V) == 0 || (*pte & PTE_U) == 0)
       return -1;
+
+    // 非 COW 且无写权限，说明非法访问
+    if (((*pte & PTE_COW) == 0) && ((*pte & PTE_W) == 0)) {
+      return -1;
+    }
+
+    // 是 COW 页就触发写时复制
+    if((*pte & PTE_COW) && !(*pte & PTE_W)){
+      startcowcopy(va0);  // 不改接口
+      pte = walk(pagetable, va0, 0);
+      if (pte == 0 || (*pte & PTE_V) == 0 || (*pte & PTE_U) == 0 || (*pte & PTE_W) == 0)
+        return -1;
+    }
+
     pa0 = PTE2PA(*pte);
+
     n = PGSIZE - (dstva - va0);
     if(n > len)
       n = len;
+
     memmove((void *)(pa0 + (dstva - va0)), src, n);
 
     len -= n;
@@ -381,6 +412,10 @@ copyout(pagetable_t pagetable, uint64 dstva, char *src, uint64 len)
   }
   return 0;
 }
+
+
+
+
 
 // Copy from user to kernel.
 // Copy len bytes to dst from virtual address srcva in a given page table.
@@ -447,5 +482,44 @@ copyinstr(pagetable_t pagetable, char *dst, uint64 srcva, uint64 max)
     return 0;
   } else {
     return -1;
+  }
+}
+
+int
+iscowpage(uint64 va){
+  struct proc* p = myproc();
+  va = PGROUNDDOWN((uint64)va);
+  if(va >= MAXVA)  // 要在walk之前
+    return 0;
+  pte_t* pte = walk(p->pagetable,va,0);
+  if(pte == 0)
+    return 0;
+  if((va < p->sz)&& (*pte & PTE_COW) && (*pte & PTE_V))
+    return 1;
+  else
+    return 0;
+  return -1;
+}
+
+
+void
+startcowcopy(uint64 va){
+  struct proc* p = myproc();
+  va = PGROUNDDOWN((uint64)va);
+  pte_t* pte = walk(p->pagetable,va,0);
+  uint64 pa = PTE2PA(*pte);
+
+  void* new = cowcopy_pa((void*)pa);
+  if((uint64)new == 0){
+    panic("cowcopy_pa err\n");
+    exit(-1);
+  }
+
+  uint64 flags = (PTE_FLAGS(*pte) | PTE_W) & (~PTE_COW);
+  uvmunmap(p->pagetable, va, 1, 0);  // 不包含kfree，因为ref--在cowcopy_pa中已经进行了
+
+  if(mappages(p->pagetable, va, PGSIZE, (uint64)new, flags) == -1){
+    kfree(new);
+    panic("cow mappages failed");
   }
 }
