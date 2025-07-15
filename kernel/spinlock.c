@@ -56,40 +56,35 @@ initlock(struct spinlock *lk, char *name)
 #endif  
 }
 
-// Acquire the lock.
-// Loops (spins) until the lock is acquired.
 void
 acquire(struct spinlock *lk)
 {
-  push_off(); // disable interrupts to avoid deadlock.
+  push_off();
   if(holding(lk))
     panic("acquire");
 
 #ifdef LAB_LOCK
-    __sync_fetch_and_add(&(lk->n), 1);
-#endif      
-
-  // On RISC-V, sync_lock_test_and_set turns into an atomic swap:
-  //   a5 = 1
-  //   s1 = &lk->locked
-  //   amoswap.w.aq a5, a5, (s1)
-  while(__sync_lock_test_and_set(&lk->locked, 1) != 0) {
-#ifdef LAB_LOCK
-    __sync_fetch_and_add(&(lk->nts), 1);
-#else
-   ;
+  int tries = 0;
 #endif
+
+  while (1) {
+#ifdef LAB_LOCK
+    tries++;
+#endif
+    if (__sync_lock_test_and_set(&lk->locked, 1) == 0)
+      break;
   }
 
-  // Tell the C compiler and the processor to not move loads or stores
-  // past this point, to ensure that the critical section's memory
-  // references happen strictly after the lock is acquired.
-  // On RISC-V, this emits a fence instruction.
-  __sync_synchronize();
+#ifdef LAB_LOCK
+  __sync_fetch_and_add(&lk->nts, tries - 1);  // 失败尝试次数
+  __sync_fetch_and_add(&lk->n, 1);            // 成功加锁次数
+#endif
 
-  // Record info about lock acquisition for holding() and debugging.
+  __sync_synchronize();
   lk->cpu = mycpu();
 }
+
+
 
 // Release the lock.
 void
