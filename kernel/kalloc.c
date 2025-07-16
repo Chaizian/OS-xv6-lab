@@ -90,7 +90,7 @@ kalloc(void)
     kmem[cid].freelist = r->next;
     release(&kmem[cid].lock);
   } else {
-    release(&kmem[cid].lock); // ✅ 先释放自己这核的锁
+    release(&kmem[cid].lock); // 先释放自己这核的锁
     r = 0;
     for(int i = 0; i < NCPU; i++){
       if(i == cid) continue;
