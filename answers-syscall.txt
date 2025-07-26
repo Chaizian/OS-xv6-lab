@@ -1,0 +1,57 @@
+问题1：查看 backtrace 输出，哪个函数调用了 syscall？
+答：调用 syscall 的函数是 `usertrap`。通过在 GDB 中打断点进入 syscall() 并查看 backtrace 可以确认调用路径通常为：
+    syscall
+    usertrap
+    uservec
+
+问题2：执行完 `struct proc *p = myproc();` 后，输入 `np /x *p` 会显示什么？
+答：这条命令会打印当前进程的 proc 结构体信息，输出示例：
+    $1 = {
+      lock = {...},
+      state = RUNNING,
+      chan = 0x0,
+      killed = 0,
+      xstate = 0,
+      pid = 1,
+      trapframe = 0x0000000087fbd000,
+      pagetable = 0x0000000087fc7000,
+      kstack = 0x80020000,
+      name = "init",
+      ...
+    }
+
+问题3：`p->trapframe->a7` 的值是多少？它代表什么？
+答：a7 的值是 `0x1`，代表系统调用号 `SYS_write`，也就是用户进程请求调用 `write` 系统调用。定义在 `kernel/syscall.h` 中。
+
+问题4：打印 `$sstatus`，上一个模式是什么？
+答：GDB 中执行 `(gdb) p /x $sstatus`，结果可能是：`$1 = 0x40020`。其中 SPP 位为 0，说明之前的模式是用户态，处理 syscall 时进入了 supervisor（内核）模式。
+
+问题5：制造内核崩溃场景
+修改 syscall 函数，将 `num = p->trapframe->a7;` 替换为 `num = *(int *) 0;`。
+运行 `make qemu` 后输出：
+    scause=0xd sepc=0x80001bfe stval=0x0
+    panic: kerneltrap
+说明访问了非法地址 0，导致崩溃。
+
+问题6：在 `kernel/kernel.asm` 中查找 sepc=0x80001bfe 所对应的指令
+答：该地址对应的汇编指令为：
+    lw a5, 0(a0)
+也就是对空指针地址进行解引用的地方。
+
+问题7：num 变量对应的是哪个寄存器？
+答：对应的是 `a0`，即 RISC-V 的第一个函数参数寄存器。在这里它被用于传入地址 0，从而触发崩溃。
+
+问题8：调试崩溃现场
+在 GDB 中设置断点：`b *0x80001bfe`，然后用 `layout asm` 查看汇编，确认与 `kernel.asm` 中一致：
+    syscall() 在 syscall.c 的第 138 行处崩溃
+
+问题9：内核为何崩溃？
+答：因为内核试图访问地址 0（非法地址，未映射）。scause=0xd 表示“load access fault”，stval=0x0 表示尝试读取地址 0，证实这是空指针解引用，违背了虚拟地址空间约束（参见 xv6 图 3-3）。
+
+问题10：崩溃时运行的是哪个进程？它的 pid 是多少？
+答：在 GDB 中执行：
+    (gdb) p p->name
+    (gdb) p p->pid
+输出为：
+    name = "init"
+    pid = 1
